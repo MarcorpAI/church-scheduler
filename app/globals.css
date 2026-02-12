@@ -1,26 +1,143 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --radius: 1rem;
+
+  /* Midnight Dark Theme (Default) */
+  --background: oklch(0.08 0.02 240);
+  --foreground: oklch(0.98 0.01 240);
+
+  --card: oklch(0.12 0.03 240 / 0.5);
+  --card-foreground: oklch(0.98 0.01 240);
+
+  --popover: oklch(0.12 0.03 240 / 0.8);
+  --popover-foreground: oklch(0.98 0.01 240);
+
+  --primary: oklch(0.88 0.1 85);
+  /* Gold primary */
+  --primary-foreground: oklch(0.08 0.02 240);
+
+  --secondary: oklch(0.18 0.04 240);
+  --secondary-foreground: oklch(0.9 0.05 85);
+
+  --muted: oklch(0.2 0.03 240 / 0.5);
+  --muted-foreground: oklch(0.7 0.02 240);
+
+  --accent: oklch(0.88 0.1 85 / 0.1);
+  --accent-foreground: oklch(0.88 0.1 85);
+
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.98 0.01 240);
+
+  --border: oklch(0.25 0.02 240 / 0.3);
+  --input: oklch(0.25 0.02 240 / 0.3);
+  --ring: oklch(0.88 0.1 85);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased selection:bg-amber-500/30;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  .liquid-glass {
+    @apply bg-white/[0.03] backdrop-blur-[12px] border border-white/[0.08] transition-all duration-500 ease-out;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  .liquid-glass:hover {
+    @apply bg-white/[0.06] border-white/[0.15] -translate-y-1;
+    box-shadow: 0 8px 48px 0 rgba(0, 0, 0, 0.45);
+  }
+
+  .liquid-glass-button {
+    @apply relative overflow-hidden bg-white/[0.05] backdrop-blur-[12px] border border-white/[0.1] text-white font-bold px-6 py-3 rounded-2xl transition-all duration-300 hover:bg-white/[0.1] hover:border-white/[0.2] active:scale-95 shadow-xl;
+  }
+
+  .liquid-glass-button::after {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-tr from-amber-500/20 to-transparent opacity-0 transition-opacity duration-300;
+  }
+
+  .liquid-glass-button:hover::after {
+    @apply opacity-100;
+  }
+
+  .card-liquid {
+    @apply bg-white/[0.03] backdrop-blur-[12px] border border-white/[0.08] transition-all duration-500 ease-out rounded-[2rem] p-8 overflow-hidden relative;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  .card-liquid-glow {
+    @apply absolute -inset-px bg-gradient-to-tr from-amber-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none;
+  }
+}
+
+/* Premium Title Styling */
+.serveflow-title {
+  @apply tracking-tighter leading-none;
+  font-family: var(--font-young), serif;
+  background: linear-gradient(135deg, #fff 0%, #aaa 50%, #fff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.2));
+}
+
+.serveflow-gold {
+  background: linear-gradient(135deg, #ffdc70 0%, #d4a017 50%, #ffdc70 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 15px rgba(212, 160, 23, 0.3));
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-black/20;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
 }
