@@ -20,6 +20,7 @@ export async function PUT(
             where: { id },
             data: {
                 title: data.title,
+                description: data.description !== undefined ? (data.description || null) : undefined,
                 duration: data.duration != null ? Number(data.duration) : undefined,
                 department_id: data.department_id !== undefined ? (data.department_id || null) : undefined,
             },

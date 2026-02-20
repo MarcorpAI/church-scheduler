@@ -16,6 +16,8 @@ export default function DepartmentsPage() {
     const [departments, setDepartments] = useState<Department[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [newName, setNewName] = useState("");
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingName, setEditingName] = useState("");
     const [isAdding, setIsAdding] = useState(false);
 
     useEffect(() => {
@@ -55,8 +57,25 @@ export default function DepartmentsPage() {
         }
     };
 
+    const handleUpdate = async (id: string) => {
+        if (!editingName.trim()) return;
+        try {
+            const res = await fetch(`/api/departments/${id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: editingName.trim() }),
+            });
+            if (!res.ok) throw new Error();
+            toast.success("Department updated");
+            setEditingId(null);
+            fetchDepartments();
+        } catch {
+            toast.error("Failed to update department");
+        }
+    };
+
     const handleDelete = async (id: string) => {
-        if (!confirm("Delete this department?")) return;
+        if (!confirm("This will also remove this department from any program items it's assigned to. Continue?")) return;
         try {
             const res = await fetch(`/api/departments/${id}`, { method: "DELETE" });
             if (!res.ok) throw new Error();
@@ -127,14 +146,56 @@ export default function DepartmentsPage() {
                     ) : (
                         <div className="divide-y divide-white/[0.03]">
                             {departments.map((dept) => (
-                                <div key={dept.id} className="flex items-center justify-between px-12 py-8 hover:bg-white/[0.02] transition-colors group">
-                                    <span className="text-xl font-bold text-white">{dept.name}</span>
-                                    <button
-                                        onClick={() => handleDelete(dept.id)}
-                                        className="h-12 w-12 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center text-white/10 hover:text-red-500 hover:border-red-500/40 hover:bg-red-500/5 transition-all duration-300 opacity-0 group-hover:opacity-100"
-                                    >
-                                        <Trash2 className="h-5 w-5" />
-                                    </button>
+                                <div key={dept.id} className="px-12 py-8 hover:bg-white/[0.02] transition-colors group">
+                                    <div className="flex items-center justify-between">
+                                        {editingId === dept.id ? (
+                                            <div className="flex gap-4 flex-1 mr-8">
+                                                <Input
+                                                    value={editingName}
+                                                    onChange={(e) => setEditingName(e.target.value)}
+                                                    className="h-12 rounded-xl border-amber-500/30 bg-white/[0.05] focus:bg-white/[0.08] font-bold"
+                                                    autoFocus
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === "Enter") handleUpdate(dept.id);
+                                                        if (e.key === "Escape") setEditingId(null);
+                                                    }}
+                                                />
+                                                <button
+                                                    onClick={() => handleUpdate(dept.id)}
+                                                    className="px-4 bg-amber-500 text-black rounded-xl font-black text-xs uppercase"
+                                                >
+                                                    Save
+                                                </button>
+                                                <button
+                                                    onClick={() => setEditingId(null)}
+                                                    className="px-4 bg-white/5 text-white/40 rounded-xl font-black text-xs uppercase hover:bg-white/10"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <span className="text-xl font-bold text-white">{dept.name}</span>
+                                                <div className="flex gap-4 opacity-0 group-hover:opacity-100 transition-all">
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingId(dept.id);
+                                                            setEditingName(dept.name);
+                                                        }}
+                                                        className="h-12 px-6 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-amber-500 hover:border-amber-500/40 hover:bg-amber-500/5 transition-all duration-300"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(dept.id)}
+                                                        className="h-12 w-12 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center text-white/10 hover:text-red-500 hover:border-red-500/40 hover:bg-red-500/5 transition-all duration-300"
+                                                    >
+                                                        <Trash2 className="h-5 w-5" />
+                                                    </button>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>

@@ -102,6 +102,14 @@ export default function LoginPage() {
                                     className="h-16 pl-16 rounded-2xl border-white/[0.05] bg-white/[0.02] focus:bg-white/[0.05] focus-visible:ring-amber-500 transition-all font-black text-xs"
                                 />
                             </div>
+                            <div className="flex justify-end pt-2">
+                                <Link
+                                    href="/forgot-password"
+                                    className="text-[10px] font-black uppercase text-white/20 hover:text-amber-500 tracking-[0.2em] transition-colors"
+                                >
+                                    Lost Credential?
+                                </Link>
+                            </div>
                         </div>
                     </CardContent>
 

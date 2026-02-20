@@ -1,0 +1,12 @@
+Few adjustments 
+- reset password feature
+- ⁠when service departments are created, you should be able to edit, delete and manage on the go in the All departments section
+- ⁠we need to add already existing templates in the system ( some existing departments so they don’t have to type, and a full template for a service then they just adjust to their preference)
+- ⁠In add item section admin should be able to have a button to add department in case he doesn’t have a department to assign to the item he is adding (it can be at the button if the department dropdown)
+- ⁠we should have run sheet templates as well
+- ⁠Edit run sheet by dragging items
+- ⁠display item full name on run sheet (add description segment for run sheet items)
+- ⁠make the duration or time more flexible - don’t use only minutes. If it crosses 60 mins, it should be an hour. Give the option to rather add whether minutes or hour when adding time, don’t make it robust mins.
+- ⁠When you click go live. Just open the run sheet down, allow admin to press the go live as a button when they review the run sheet. Do add a review run sheet section. Where admin is able to preview run sheet and makes edits where necessary before going live
+- ⁠Allow admin to still view all run sheet items on device while the display is on the display screen showing service activities. This is so so he can pause a live item on the run sheet. There are days some items might be taken out during service so let’s make it flexible Enoch to accommodate that. Where he is able to adjust items during live. Let’s have two options to go full live without pausing and another option to allow admin be the one to load the items from the run sheet but still in real time. So eg: when he clicks opening prayer (all is live), time starts immediately and when it ends (there’s a red notice before people leave.
+- ⁠Also let’s add the option to put or accommodate time for small drags live between run sheet items, about maybe 2 - 3 mins.

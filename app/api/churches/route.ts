@@ -50,5 +50,14 @@ export async function POST(request: Request) {
         }
     });
 
+    // Seed default departments
+    const defaultDepartments = ["Worship", "Media", "AV", "Ushers", "Protocol", "Choir", "Prayer", "Children"];
+    await prisma.department.createMany({
+        data: defaultDepartments.map(name => ({
+            name,
+            church_id: church.id
+        }))
+    });
+
     return NextResponse.json(church, { status: 201 });
 }

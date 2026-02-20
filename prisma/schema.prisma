@@ -64,20 +64,24 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
-  password      String?   // Hashed password for credentials provider
+  password      String? // Hashed password for credentials provider
   role          Role      @default(VOLUNTEER)
   church_id     String?
   church        Church?   @relation(fields: [church_id], references: [id])
-  
-  accounts      Account[]
-  sessions      Session[]
-  
+
+  accounts Account[]
+  sessions Session[]
+
   // App specific relations
   created_at    DateTime       @default(now())
   updated_at    DateTime       @updatedAt
   tasks         Task[]
   notifications Notification[]
   services      Service[]      @relation("CreatedBy")
+
+  // Password Reset
+  reset_token         String?
+  reset_token_expires DateTime?
 }
 
 model VerificationToken {
@@ -90,15 +94,15 @@ model VerificationToken {
 
 // Multi-Tenant Church Model
 model Church {
-  id           String       @id @default(uuid())
-  name         String
-  invite_code  String       @unique @default(uuid()) // Passkey for volunteers
-  created_at   DateTime     @default(now())
-  updated_at   DateTime     @updatedAt
+  id          String   @id @default(uuid())
+  name        String
+  invite_code String   @unique @default(uuid()) // Passkey for volunteers
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
 
-  users        User[]
-  services     Service[]
-  departments  Department[]
+  users       User[]
+  services    Service[]
+  departments Department[]
 }
 
 model Department {
@@ -113,30 +117,37 @@ model Department {
 
 // App Domain Models
 model Service {
-  id              String     @id @default(uuid())
+  id              String        @id @default(uuid())
   name            String
   description     String?
   date            DateTime
-  recurrence      Recurrence @default(NONE)
+  recurrence      Recurrence    @default(NONE)
   church_id       String
-  church          Church     @relation(fields: [church_id], references: [id], onDelete: Cascade)
+  church          Church        @relation(fields: [church_id], references: [id], onDelete: Cascade)
   created_by      String
-  creator         User       @relation("CreatedBy", fields: [created_by], references: [id])
+  creator         User          @relation("CreatedBy", fields: [created_by], references: [id])
   tasks           Task[]
   items           ProgramItem[]
   // Live session fields
-  is_live         Boolean    @default(false)
+  is_live         Boolean       @default(false)
   current_item_id String?
   item_started_at DateTime?
-  is_paused       Boolean    @default(false)
-  created_at      DateTime   @default(now())
-  updated_at      DateTime   @updatedAt
+  is_paused       Boolean       @default(false)
+
+  // Advanced V2 Features
+  is_template  Boolean @default(false)
+  advance_mode String  @default("AUTO") // "AUTO" or "MANUAL"
+  buffer_time  Int     @default(0) // in seconds (for gaps between items)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 }
 
 model ProgramItem {
   id            String      @id @default(uuid())
   title         String
-  duration      Int         // duration in seconds
+  description   String?
+  duration      Int // duration in seconds
   order         Int
   service_id    String
   service       Service     @relation(fields: [service_id], references: [id], onDelete: Cascade)

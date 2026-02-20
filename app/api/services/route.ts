@@ -22,15 +22,17 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
+    const isTemplate = searchParams.get("template") === "true";
 
     try {
         const services = await prisma.service.findMany({
             where: {
                 church_id: user.church_id,
-                date: {
+                is_template: isTemplate,
+                date: !isTemplate ? {
                     gte: from ? new Date(from) : undefined,
                     lte: to ? new Date(to) : undefined,
-                },
+                } : undefined,
             },
             include: {
                 _count: {
@@ -65,7 +67,7 @@ export async function POST(request: Request) {
     }
 
     try {
-        const { name, description, date, recurrence } = await request.json();
+        const { name, description, date, recurrence, template_id } = await request.json();
 
         if (!name || !date) {
             return NextResponse.json(
@@ -82,8 +84,30 @@ export async function POST(request: Request) {
                 recurrence: recurrence || "NONE",
                 church_id: user.church_id,
                 created_by: session.user.id,
+                is_template: false,
             },
         });
+
+        // If template_id is provided, clone items
+        if (template_id) {
+            const templateItems = await prisma.programItem.findMany({
+                where: { service_id: template_id },
+                orderBy: { order: "asc" },
+            });
+
+            if (templateItems.length > 0) {
+                await prisma.programItem.createMany({
+                    data: templateItems.map(item => ({
+                        title: item.title,
+                        description: item.description,
+                        duration: item.duration,
+                        order: item.order,
+                        service_id: service.id,
+                        department_id: item.department_id,
+                    })),
+                });
+            }
+        }
 
         return NextResponse.json(service, { status: 201 });
     } catch (error: unknown) {

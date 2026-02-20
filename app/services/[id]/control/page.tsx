@@ -13,6 +13,7 @@ import {
     ExternalLink,
     Copy,
     Check,
+    Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -35,9 +36,12 @@ interface LiveState {
     name: string;
     is_live: boolean;
     is_paused: boolean;
+    advance_mode: "AUTO" | "MANUAL";
+    buffer_time: number;
     item_started_at: string | null;
     current_item: ProgramItem | null;
     next_item: ProgramItem | null;
+    items: ProgramItem[];
     total_items: number;
     current_index: number;
 }
@@ -47,6 +51,15 @@ function formatTime(seconds: number): string {
     const s = Math.abs(seconds) % 60;
     const sign = seconds < 0 ? "+" : "";
     return `${sign}${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function formatDuration(seconds: number): string {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s > 0 ? s + "s" : ""}`;
+    return `${s}s`;
 }
 
 export default function LiveControlPage() {
@@ -110,8 +123,8 @@ export default function LiveControlPage() {
                     const raw = itemDurationRef.current - elapsed;
                     // Use floor for overtime (negative) so +0:10 means exactly 10 real seconds
                     const remaining = raw >= 0 ? Math.ceil(raw) : Math.floor(raw);
-                    // Cap overtime display at -10 seconds
-                    setCountdown(Math.max(remaining, -10));
+
+                    setCountdown(remaining);
 
                     // Fire standby flash at 30s
                     if (remaining <= 30 && remaining > 0 && flashFiredRef.current !== state?.current_item?.id) {
@@ -120,35 +133,33 @@ export default function LiveControlPage() {
                         setTimeout(() => setShowFlash(false), 4000);
                     }
 
-                    // Auto-advance after 10s overtime — optimistic UI update
-                    if (remaining <= -10 && !autoAdvanceRef.current) {
-                        autoAdvanceRef.current = true;
+                    // Auto-advance logic
+                    if (state.advance_mode === "AUTO" && !autoAdvanceRef.current) {
+                        const bufferLimit = -(state.buffer_time || 0);
+                        if (remaining <= bufferLimit) {
+                            autoAdvanceRef.current = true;
 
-                        // Read from ref (not closure state) to avoid stale next_item
-                        const nextItem = nextItemRef.current;
+                            const nextItem = nextItemRef.current;
+                            if (nextItem) {
+                                const now = Date.now();
+                                itemStartRef.current = now;
+                                itemDurationRef.current = nextItem.duration;
+                                nextItemRef.current = null;
+                                setCountdown(nextItem.duration);
 
-                        // Optimistically switch to next item immediately
-                        if (nextItem) {
-                            const now = Date.now();
-                            itemStartRef.current = now;
-                            itemDurationRef.current = nextItem.duration;
-                            nextItemRef.current = null;
-                            setCountdown(nextItem.duration);
-
-                            setState((prev) => {
-                                if (!prev) return prev;
-                                return {
-                                    ...prev,
-                                    current_item: nextItem,
-                                    next_item: null, // will be corrected by fetchState
-                                    item_started_at: new Date(now).toISOString(),
-                                    current_index: prev.current_index + 1,
-                                };
-                            });
+                                setState((prev) => {
+                                    if (!prev) return prev;
+                                    return {
+                                        ...prev,
+                                        current_item: nextItem,
+                                        next_item: null,
+                                        item_started_at: new Date(now).toISOString(),
+                                        current_index: prev.current_index + 1,
+                                    };
+                                });
+                                handleNext();
+                            }
                         }
-
-                        // Fire server sync in background
-                        handleNext();
                     }
                 }
             };
@@ -159,7 +170,7 @@ export default function LiveControlPage() {
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current);
         };
-    }, [state?.is_live, state?.is_paused, state?.current_item?.id]);
+    }, [state?.is_live, state?.is_paused, state?.current_item?.id, state?.advance_mode, state?.buffer_time]);
 
     const handleNext = async () => {
         try {
@@ -172,6 +183,49 @@ export default function LiveControlPage() {
         } catch {
             toast.error("Failed to advance");
             autoAdvanceRef.current = false;
+        }
+    };
+
+    const handleSkipToItem = async (itemId: string) => {
+        if (!confirm("Skip to this item?")) return;
+        try {
+            const res = await fetch(`/api/services/${params.id}/live/skip`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ itemId }),
+            });
+            if (!res.ok) throw new Error();
+            fetchState();
+            toast.success("Skipped to item");
+        } catch {
+            toast.error("Failed to skip item");
+        }
+    };
+
+    const handleAdjustDuration = async (seconds: number) => {
+        try {
+            const res = await fetch(`/api/services/${params.id}/live/adjust`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ seconds }),
+            });
+            if (!res.ok) throw new Error();
+            fetchState();
+            toast.success(`Duration adjusted by ${seconds > 0 ? "+" : ""}${seconds}s`);
+        } catch {
+            toast.error("Failed to adjust duration");
+        }
+    };
+
+    const handleDeleteItem = async (itemId: string) => {
+        if (!confirm("Remove this item from the live run sheet?")) return;
+        try {
+            const res = await fetch(`/api/items/${itemId}`, { method: "DELETE" });
+            if (!res.ok) throw new Error();
+            fetchState();
+            toast.success("Item removed");
+        } catch {
+            toast.error("Failed to remove item");
         }
     };
 
@@ -324,7 +378,7 @@ export default function LiveControlPage() {
                 )}
 
                 {/* Countdown */}
-                <div className={`text-9xl md:text-[12rem] font-black tracking-tighter leading-none mt-8 transition-colors duration-300 ${isOvertime ? "text-red-400" : state.is_paused ? "text-white/20" : "text-white"}`}>
+                <div className={`text-9xl md:text-[12rem] font-black tracking-tighter leading-none mt-8 transition-colors duration-300 ${isOvertime ? (state.advance_mode === "AUTO" ? "text-amber-500/60" : "text-red-400") : state.is_paused ? "text-white/20" : "text-white"}`}>
                     {state.is_paused ? (
                         <span className="animate-pulse">PAUSED</span>
                     ) : (
@@ -332,8 +386,45 @@ export default function LiveControlPage() {
                     )}
                 </div>
                 {isOvertime && !state.is_paused && (
-                    <p className="text-red-400/60 font-bold text-sm uppercase tracking-widest mt-4">Overtime</p>
+                    <p className={`${state.advance_mode === "AUTO" ? "text-amber-500/40" : "text-red-400/60"} font-bold text-sm uppercase tracking-widest mt-4`}>
+                        {state.advance_mode === "AUTO" && Math.abs(countdown) <= state.buffer_time ? `Buffer (${state.buffer_time - Math.abs(countdown)}s left)` : "Overtime"}
+                    </p>
                 )}
+
+                {/* Adjust Duration Buttons */}
+                {!state.is_paused && (
+                    <div className="mt-12 flex justify-center gap-4">
+                        <button
+                            onClick={() => handleAdjustDuration(-30)}
+                            className="h-12 px-6 rounded-2xl bg-white/[0.03] border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white hover:bg-white/[0.06] transition-all"
+                        >
+                            -30s
+                        </button>
+                        <button
+                            onClick={() => handleAdjustDuration(30)}
+                            className="h-12 px-6 rounded-2xl bg-white/[0.03] border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white hover:bg-white/[0.06] transition-all"
+                        >
+                            +30s
+                        </button>
+                        <button
+                            onClick={() => handleAdjustDuration(60)}
+                            className="h-12 px-6 rounded-2xl bg-white/[0.03] border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white hover:bg-white/[0.06] transition-all"
+                        >
+                            +1m
+                        </button>
+                    </div>
+                )}
+
+                <div className="mt-8 flex justify-center gap-4">
+                    <span className="px-3 py-1 rounded-full bg-white/[0.03] border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/40">
+                        {state.advance_mode} Mode
+                    </span>
+                    {state.buffer_time > 0 && (
+                        <span className="px-3 py-1 rounded-full bg-white/[0.03] border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/40">
+                            {state.buffer_time}s Buffer
+                        </span>
+                    )}
+                </div>
             </div>
 
             {/* Next item preview */}
@@ -349,7 +440,7 @@ export default function LiveControlPage() {
             )}
 
             {/* Controls */}
-            <div className="flex items-center justify-center gap-6">
+            <div className="flex items-center justify-center gap-6 mb-24">
                 <button
                     onClick={handlePause}
                     className="h-20 w-20 rounded-[2rem] bg-white/[0.05] border border-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/[0.1] hover:border-white/20 transition-all duration-300 hover:scale-110"
@@ -368,6 +459,81 @@ export default function LiveControlPage() {
                 >
                     <Square className="h-8 w-8" />
                 </button>
+            </div>
+
+            {/* Live Run Sheet */}
+            <div className="space-y-8">
+                <div className="flex items-center justify-between px-4">
+                    <h3 className="text-sm font-black uppercase tracking-[0.3em] text-white/20">Live Run Sheet</h3>
+                    <span className="text-[10px] font-black text-amber-500/40 uppercase tracking-widest">{state.total_items} Total Items</span>
+                </div>
+
+                <div className="liquid-glass border-white/[0.05] rounded-[2.5rem] overflow-hidden">
+                    <div className="divide-y divide-white/[0.05]">
+                        {state.items.map((item, index) => {
+                            const isCurrent = item.id === state.current_item?.id;
+                            const isPast = index < state.current_index;
+                            const isFuture = index > state.current_index;
+
+                            return (
+                                <div
+                                    key={item.id}
+                                    className={`p-8 flex items-center justify-between transition-colors ${isCurrent ? "bg-amber-500/[0.03]" : ""}`}
+                                >
+                                    <div className="flex items-center gap-8">
+                                        <span className={`text-xs font-black w-6 ${isCurrent ? "text-amber-500" : isPast ? "text-white/10" : "text-white/30"}`}>
+                                            {index + 1}
+                                        </span>
+                                        <div className="space-y-1">
+                                            <div className={`font-bold text-lg ${isCurrent ? "text-white" : isPast ? "text-white/20" : "text-white/60"}`}>
+                                                {item.title}
+                                            </div>
+                                            {item.department && (
+                                                <div className={`text-[10px] font-black uppercase tracking-widest ${isCurrent ? "text-amber-500/60" : "text-white/10"}`}>
+                                                    {item.department.name}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-6">
+                                        <span className={`text-xs font-black uppercase tracking-widest ${isCurrent ? "text-amber-500" : isPast ? "text-white/10" : "text-white/30"}`}>
+                                            {formatDuration(item.duration)}
+                                        </span>
+
+                                        {isFuture && (
+                                            <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    onClick={() => handleSkipToItem(item.id)}
+                                                    className="h-10 px-4 rounded-xl bg-white/[0.03] border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-amber-500 hover:border-amber-500/40 transition-all"
+                                                >
+                                                    Skip To
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteItem(item.id)}
+                                                    className="h-10 w-10 flex items-center justify-center rounded-xl bg-red-500/5 border border-red-500/10 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {isCurrent && (
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-amber-500">Active</span>
+                                            </div>
+                                        )}
+
+                                        {isPast && (
+                                            <Check className="h-4 w-4 text-emerald-500/30" />
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
             </div>
         </div>
     );

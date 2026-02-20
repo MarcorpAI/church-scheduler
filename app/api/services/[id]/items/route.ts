@@ -33,7 +33,7 @@ export async function POST(
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const { title, duration, department_id } = await request.json();
+    const { title, description, duration, department_id } = await request.json();
 
     if (!title || duration == null) {
         return NextResponse.json(
@@ -51,6 +51,7 @@ export async function POST(
     const item = await prisma.programItem.create({
         data: {
             title,
+            description: description || null,
             duration: Number(duration),
             order: (maxOrder._max.order ?? -1) + 1,
             service_id: id,

@@ -15,6 +15,8 @@ export async function GET(
             name: true,
             is_live: true,
             is_paused: true,
+            advance_mode: true,
+            buffer_time: true,
             current_item_id: true,
             item_started_at: true,
             items: {
@@ -39,9 +41,12 @@ export async function GET(
         name: service.name,
         is_live: service.is_live,
         is_paused: service.is_paused,
+        advance_mode: service.advance_mode,
+        buffer_time: service.buffer_time,
         item_started_at: service.item_started_at,
         current_item: currentItem,
         next_item: nextItem,
+        items: service.items,
         total_items: service.items.length,
         current_index: currentIndex,
     });

@@ -34,7 +34,14 @@ import {
     Pencil,
     Radio,
     Sparkles,
+    ArrowRight,
 } from "lucide-react";
+import {
+    DragDropContext,
+    Droppable,
+    Draggable,
+    DropResult,
+} from "@hello-pangea/dnd";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -46,6 +53,7 @@ interface Department {
 interface ProgramItem {
     id: string;
     title: string;
+    description: string | null;
     duration: number;
     order: number;
     department_id: string | null;
@@ -62,9 +70,16 @@ interface Service {
 }
 
 function formatDuration(seconds: number): string {
-    const m = Math.floor(seconds / 60);
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
-    return s > 0 ? `${m}m ${s}s` : `${m}m`;
+
+    let parts = [];
+    if (h > 0) parts.push(`${h}h`);
+    if (m > 0) parts.push(`${m}m`);
+    if (s > 0) parts.push(`${s}s`);
+
+    return parts.length > 0 ? parts.join(" ") : "0s";
 }
 
 export default function ServiceBuilderPage() {
@@ -78,8 +93,14 @@ export default function ServiceBuilderPage() {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<ProgramItem | null>(null);
     const [itemTitle, setItemTitle] = useState("");
-    const [itemDuration, setItemDuration] = useState("5");
+    const [itemDescription, setItemDescription] = useState("");
+    const [durationHours, setDurationHours] = useState("0");
+    const [durationMinutes, setDurationMinutes] = useState("5");
     const [itemDeptId, setItemDeptId] = useState<string>("none");
+
+    // Inline Dept creation
+    const [isCreatingDept, setIsCreatingDept] = useState(false);
+    const [newDeptName, setNewDeptName] = useState("");
 
     const fetchService = useCallback(async () => {
         try {
@@ -109,22 +130,57 @@ export default function ServiceBuilderPage() {
     const openAddDialog = () => {
         setEditingItem(null);
         setItemTitle("");
-        setItemDuration("5");
+        setItemDescription("");
+        setDurationHours("0");
+        setDurationMinutes("5");
         setItemDeptId("none");
+        setIsCreatingDept(false);
+        setNewDeptName("");
         setDialogOpen(true);
     };
 
     const openEditDialog = (item: ProgramItem) => {
         setEditingItem(item);
         setItemTitle(item.title);
-        setItemDuration(String(item.duration / 60));
+        setItemDescription(item.description || "");
+        setDurationHours(String(Math.floor(item.duration / 3600)));
+        setDurationMinutes(String(Math.floor((item.duration % 3600) / 60)));
         setItemDeptId(item.department_id || "none");
+        setIsCreatingDept(false);
+        setNewDeptName("");
         setDialogOpen(true);
+    };
+
+    const handleCreateDept = async () => {
+        if (!newDeptName.trim()) return;
+        try {
+            const res = await fetch("/api/departments", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: newDeptName.trim() }),
+            });
+            if (!res.ok) throw new Error();
+            const dept = await res.json();
+            setDepartments(prev => [...prev, dept]);
+            setItemDeptId(dept.id);
+            setIsCreatingDept(false);
+            setNewDeptName("");
+            toast.success("Department created");
+        } catch {
+            toast.error("Failed to create department");
+        }
     };
 
     const handleSaveItem = async (e: React.FormEvent) => {
         e.preventDefault();
-        const durationSeconds = Math.round(parseFloat(itemDuration) * 60);
+        const durationSeconds = (parseInt(durationHours) * 3600) + (parseFloat(durationMinutes) * 60);
+
+        const payload = {
+            title: itemTitle,
+            description: itemDescription || null,
+            duration: Math.round(durationSeconds),
+            department_id: itemDeptId === "none" ? null : itemDeptId,
+        };
 
         if (editingItem) {
             // Update existing
@@ -132,11 +188,7 @@ export default function ServiceBuilderPage() {
                 const res = await fetch(`/api/items/${editingItem.id}`, {
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        title: itemTitle,
-                        duration: durationSeconds,
-                        department_id: itemDeptId === "none" ? null : itemDeptId,
-                    }),
+                    body: JSON.stringify(payload),
                 });
                 if (!res.ok) throw new Error();
                 toast.success("Item updated");
@@ -150,11 +202,7 @@ export default function ServiceBuilderPage() {
                 const res = await fetch(`/api/services/${params.id}/items`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        title: itemTitle,
-                        duration: durationSeconds,
-                        department_id: itemDeptId === "none" ? null : itemDeptId,
-                    }),
+                    body: JSON.stringify(payload),
                 });
                 if (!res.ok) throw new Error();
                 toast.success("Item added");
@@ -179,33 +227,80 @@ export default function ServiceBuilderPage() {
         }
     };
 
+    const onDragEnd = async (result: DropResult) => {
+        if (!result.destination || !service) return;
+
+        const items = Array.from(service.items);
+        const [reorderedItem] = items.splice(result.source.index, 1);
+        items.splice(result.destination.index, 0, reorderedItem);
+
+        // Optimistic update
+        setService({ ...service, items });
+
+        // Prepare payload for API
+        const payload = items.map((item, index) => ({
+            id: item.id,
+            order: index,
+        }));
+
+        try {
+            const res = await fetch(`/api/services/${params.id}/items/reorder`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error();
+        } catch {
+            toast.error("Failed to sync reorder with server");
+            fetchService(); // Revert to server state
+        }
+    };
+
     const handleMoveItem = async (index: number, direction: "up" | "down") => {
         if (!service) return;
         const items = [...service.items];
         const swapIdx = direction === "up" ? index - 1 : index + 1;
         if (swapIdx < 0 || swapIdx >= items.length) return;
 
-        // Swap orders
-        const reordered = items.map((item, i) => {
-            if (i === index) return { id: item.id, order: items[swapIdx].order };
-            if (i === swapIdx) return { id: item.id, order: items[index].order };
-            return { id: item.id, order: item.order };
-        });
+        const newItems = [...items];
+        [newItems[index], newItems[swapIdx]] = [newItems[swapIdx], newItems[index]];
+
+        setService({ ...service, items: newItems });
+
+        const payload = newItems.map((item, i) => ({
+            id: item.id,
+            order: i,
+        }));
 
         try {
             await fetch(`/api/services/${params.id}/items/reorder`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(reordered),
+                body: JSON.stringify(payload),
             });
-            fetchService();
         } catch {
             toast.error("Failed to reorder");
+            fetchService();
         }
     };
 
+    const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+    const [advanceMode, setAdvanceMode] = useState<"AUTO" | "MANUAL">("AUTO");
+    const [bufferTime, setBufferTime] = useState("0");
+
     const handleGoLive = async () => {
         try {
+            // Update service settings first
+            const updateRes = await fetch(`/api/services/${params.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    advance_mode: advanceMode,
+                    buffer_time: parseInt(bufferTime),
+                }),
+            });
+            if (!updateRes.ok) throw new Error("Failed to update settings");
+
             const res = await fetch(`/api/services/${params.id}/live/start`, {
                 method: "POST",
             });
@@ -215,8 +310,25 @@ export default function ServiceBuilderPage() {
                 return;
             }
             router.push(`/services/${params.id}/control`);
+        } catch (error: any) {
+            toast.error(error.message || "Failed to start live session");
+        }
+    };
+
+    const handleSaveAsTemplate = async () => {
+        const templateName = prompt("Enter a name for this template:", `${service?.name} Template`);
+        if (!templateName) return;
+
+        try {
+            const res = await fetch(`/api/services/${params.id}/to-template`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ templateName }),
+            });
+            if (!res.ok) throw new Error();
+            toast.success("Run sheet saved as template");
         } catch {
-            toast.error("Failed to start live session");
+            toast.error("Failed to save as template");
         }
     };
 
@@ -263,7 +375,17 @@ export default function ServiceBuilderPage() {
                     </div>
                 </div>
 
-                <div className="flex gap-4">
+                <div className="flex flex-wrap gap-4">
+                    <button
+                        onClick={handleSaveAsTemplate}
+                        className="liquid-glass-button h-16 px-6 text-sm border-white/5 opacity-60 hover:opacity-100"
+                        title="Save run sheet as a reusable template"
+                    >
+                        <span className="relative z-10 flex items-center gap-2">
+                            <Sparkles className="h-4 w-4" />
+                            Save as Template
+                        </span>
+                    </button>
                     <button onClick={openAddDialog} className="liquid-glass-button h-16 px-8 text-lg shadow-[0_0_30px_rgba(255,255,255,0.05)]">
                         <span className="relative z-10 flex items-center gap-3">
                             <Plus className="h-5 w-5" />
@@ -272,7 +394,7 @@ export default function ServiceBuilderPage() {
                     </button>
                     {service.items.length > 0 && !service.is_live && (
                         <button
-                            onClick={handleGoLive}
+                            onClick={() => setReviewDialogOpen(true)}
                             className="liquid-glass-button h-16 px-8 text-lg border-amber-500/30 hover:border-amber-500/60 shadow-[0_0_30px_rgba(245,158,11,0.1)]"
                         >
                             <span className="relative z-10 flex items-center gap-3 text-amber-500">
@@ -296,7 +418,7 @@ export default function ServiceBuilderPage() {
 
             {/* Add/Edit Dialog */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="max-w-md bg-black/80 backdrop-blur-3xl border-white/[0.05] rounded-[2.5rem] p-10 shadow-2xl">
+                <DialogContent className="max-w-xl bg-black/80 backdrop-blur-3xl border-white/[0.05] rounded-[2.5rem] p-10 shadow-2xl">
                     <DialogHeader className="space-y-6">
                         <div className="h-14 w-14 rounded-2xl bg-white/[0.03] flex items-center justify-center border border-white/10 shadow-inner">
                             <Sparkles className="h-7 w-7 text-amber-500" />
@@ -310,9 +432,9 @@ export default function ServiceBuilderPage() {
                             </DialogDescription>
                         </div>
                     </DialogHeader>
-                    <form onSubmit={handleSaveItem} className="space-y-8 py-6">
+                    <form onSubmit={handleSaveItem} className="space-y-6 py-6 overflow-y-auto max-h-[60vh] px-2">
                         <div className="space-y-3">
-                            <Label className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em]">Title</Label>
+                            <Label className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em]">Item Title</Label>
                             <Input
                                 required
                                 placeholder="e.g. Opening Prayer"
@@ -321,38 +443,100 @@ export default function ServiceBuilderPage() {
                                 className="h-14 rounded-xl border-white/[0.05] bg-white/[0.02] focus:bg-white/[0.05] focus-visible:ring-amber-500 font-bold text-lg"
                             />
                         </div>
+
                         <div className="space-y-3">
-                            <Label className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em]">Duration (minutes)</Label>
+                            <Label className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em]">Description / Details (Optional)</Label>
                             <Input
-                                required
-                                type="number"
-                                min="0.5"
-                                step="0.5"
-                                placeholder="5"
-                                value={itemDuration}
-                                onChange={(e) => setItemDuration(e.target.value)}
+                                placeholder="e.g. Lead by Pastor John"
+                                value={itemDescription}
+                                onChange={(e) => setItemDescription(e.target.value)}
                                 className="h-14 rounded-xl border-white/[0.05] bg-white/[0.02] focus:bg-white/[0.05] focus-visible:ring-amber-500 font-bold text-lg"
                             />
                         </div>
-                        <div className="space-y-3">
-                            <Label className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em]">Department (optional)</Label>
-                            <Select value={itemDeptId} onValueChange={setItemDeptId}>
-                                <SelectTrigger className="h-14 rounded-xl border-white/[0.05] bg-white/[0.02] text-white/60 font-bold">
-                                    <SelectValue placeholder="None" />
-                                </SelectTrigger>
-                                <SelectContent className="rounded-[2rem] border-white/10 bg-black/80 backdrop-blur-3xl p-2 shadow-2xl">
-                                    <SelectItem value="none" className="font-bold py-4 px-6 text-white/40">None</SelectItem>
-                                    {departments.map((d) => (
-                                        <SelectItem key={d.id} value={d.id} className="font-bold py-4 px-6 text-white/60 focus:bg-amber-500/10 focus:text-amber-500">
-                                            {d.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-3">
+                                <Label className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em]">Hours</Label>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    value={durationHours}
+                                    onChange={(e) => setDurationHours(e.target.value)}
+                                    className="h-14 rounded-xl border-white/[0.05] bg-white/[0.02] focus:bg-white/[0.05] focus-visible:ring-amber-500 font-bold text-lg"
+                                />
+                            </div>
+                            <div className="space-y-3">
+                                <Label className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em]">Minutes</Label>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.5"
+                                    value={durationMinutes}
+                                    onChange={(e) => setDurationMinutes(e.target.value)}
+                                    className="h-14 rounded-xl border-white/[0.05] bg-white/[0.02] focus:bg-white/[0.05] focus-visible:ring-amber-500 font-bold text-lg"
+                                />
+                            </div>
                         </div>
-                        <DialogFooter>
-                            <button type="submit" className="liquid-glass-button w-full h-16 text-lg tracking-tighter">
-                                {editingItem ? "Save Changes" : "Add to Run Sheet"}
+
+                        <div className="space-y-3">
+                            <Label className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em]">Department</Label>
+                            {!isCreatingDept ? (
+                                <div className="space-y-4">
+                                    <Select value={itemDeptId} onValueChange={setItemDeptId}>
+                                        <SelectTrigger className="h-14 rounded-xl border-white/[0.05] bg-white/[0.02] text-white/60 font-bold">
+                                            <SelectValue placeholder="None" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-[2rem] border-white/10 bg-black/80 backdrop-blur-3xl p-2 shadow-2xl">
+                                            <SelectItem value="none" className="font-bold py-4 px-6 text-white/40">None</SelectItem>
+                                            {departments.map((d) => (
+                                                <SelectItem key={d.id} value={d.id} className="font-bold py-4 px-6 text-white/60 focus:bg-amber-500/10 focus:text-amber-500">
+                                                    {d.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsCreatingDept(true)}
+                                        className="text-[10px] font-black uppercase text-amber-500/50 hover:text-amber-500 tracking-[0.2em] transition-colors"
+                                    >
+                                        + Create New Department
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                                    <div className="flex gap-2">
+                                        <Input
+                                            placeholder="Enter department name"
+                                            value={newDeptName}
+                                            onChange={(e) => setNewDeptName(e.target.value)}
+                                            className="h-14 rounded-xl border-amber-500/20 bg-white/[0.05] font-bold"
+                                            autoFocus
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleCreateDept}
+                                            className="h-14 px-6 bg-amber-500 text-black rounded-xl font-black text-xs uppercase"
+                                        >
+                                            Add
+                                        </button>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsCreatingDept(false)}
+                                        className="text-[10px] font-black uppercase text-white/20 hover:text-white tracking-[0.2em] transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        <DialogFooter className="pt-6">
+                            <button type="submit" className="liquid-glass-button w-full h-18 text-xl tracking-tighter shadow-2xl">
+                                <span className="relative z-10 flex items-center justify-center gap-3">
+                                    {editingItem ? "Update Item" : "Add to Run Sheet"}
+                                    <ArrowRight className="h-5 w-5" />
+                                </span>
                             </button>
                         </DialogFooter>
                     </form>
@@ -379,69 +563,99 @@ export default function ServiceBuilderPage() {
                             </button>
                         </div>
                     ) : (
-                        <div className="divide-y divide-white/[0.03]">
-                            {service.items.map((item, index) => (
-                                <div
-                                    key={item.id}
-                                    className="flex items-center gap-6 px-12 py-8 hover:bg-white/[0.02] transition-colors group"
-                                >
-                                    {/* Order controls */}
-                                    <div className="flex flex-col gap-1">
-                                        <button
-                                            onClick={() => handleMoveItem(index, "up")}
-                                            disabled={index === 0}
-                                            className="h-8 w-8 rounded-lg bg-white/[0.02] border border-white/5 flex items-center justify-center text-white/20 hover:text-amber-500 hover:border-amber-500/30 transition-all disabled:opacity-10 disabled:cursor-not-allowed"
-                                        >
-                                            <ArrowUp className="h-3 w-3" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleMoveItem(index, "down")}
-                                            disabled={index === service.items.length - 1}
-                                            className="h-8 w-8 rounded-lg bg-white/[0.02] border border-white/5 flex items-center justify-center text-white/20 hover:text-amber-500 hover:border-amber-500/30 transition-all disabled:opacity-10 disabled:cursor-not-allowed"
-                                        >
-                                            <ArrowDown className="h-3 w-3" />
-                                        </button>
-                                    </div>
+                        <DragDropContext onDragEnd={onDragEnd}>
+                            <Droppable droppableId="run-sheet">
+                                {(provided) => (
+                                    <div
+                                        {...provided.droppableProps}
+                                        ref={provided.innerRef}
+                                        className="divide-y divide-white/[0.03]"
+                                    >
+                                        {service.items.map((item, index) => (
+                                            <Draggable key={item.id} draggableId={item.id} index={index}>
+                                                {(provided, snapshot) => (
+                                                    <div
+                                                        ref={provided.innerRef}
+                                                        {...provided.draggableProps}
+                                                        className={`flex items-center gap-6 px-12 py-8 transition-colors group ${snapshot.isDragging ? "bg-white/[0.1] backdrop-blur-xl z-50" : "hover:bg-white/[0.02]"
+                                                            }`}
+                                                    >
+                                                        {/* Drag Handle */}
+                                                        <div
+                                                            {...provided.dragHandleProps}
+                                                            className="text-white/10 hover:text-amber-500 transition-colors cursor-grab active:cursor-grabbing"
+                                                        >
+                                                            <GripVertical className="h-6 w-6" />
+                                                        </div>
 
-                                    {/* Order number */}
-                                    <div className="h-12 w-12 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center justify-center text-white/20 font-black text-lg shrink-0">
-                                        {index + 1}
-                                    </div>
+                                                        {/* Order controls */}
+                                                        <div className="flex flex-col gap-1">
+                                                            <button
+                                                                onClick={() => handleMoveItem(index, "up")}
+                                                                disabled={index === 0}
+                                                                className="h-8 w-8 rounded-lg bg-white/[0.02] border border-white/5 flex items-center justify-center text-white/20 hover:text-amber-500 hover:border-amber-500/30 transition-all disabled:opacity-10 disabled:cursor-not-allowed"
+                                                            >
+                                                                <ArrowUp className="h-3 w-3" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleMoveItem(index, "down")}
+                                                                disabled={index === service.items.length - 1}
+                                                                className="h-8 w-8 rounded-lg bg-white/[0.02] border border-white/5 flex items-center justify-center text-white/20 hover:text-amber-500 hover:border-amber-500/30 transition-all disabled:opacity-10 disabled:cursor-not-allowed"
+                                                            >
+                                                                <ArrowDown className="h-3 w-3" />
+                                                            </button>
+                                                        </div>
 
-                                    {/* Content */}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-4 mb-1">
-                                            <span className="text-xl font-bold text-white truncate">{item.title}</span>
-                                            {item.department && (
-                                                <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-black uppercase tracking-widest border border-amber-500/20 shrink-0">
-                                                    {item.department.name}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-2 text-white/30 text-sm font-medium">
-                                            <Clock className="h-3 w-3" />
-                                            {formatDuration(item.duration)}
-                                        </div>
-                                    </div>
+                                                        {/* Order number */}
+                                                        <div className="h-12 w-12 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center justify-center text-white/20 font-black text-lg shrink-0">
+                                                            {index + 1}
+                                                        </div>
 
-                                    {/* Actions */}
-                                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                            onClick={() => openEditDialog(item)}
-                                            className="h-10 w-10 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-center text-white/20 hover:text-amber-500 hover:border-amber-500/30 transition-all"
-                                        >
-                                            <Pencil className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDeleteItem(item.id)}
-                                            className="h-10 w-10 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-center text-white/20 hover:text-red-500 hover:border-red-500/30 transition-all"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
+                                                        {/* Content */}
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-4 mb-2">
+                                                                <span className="text-xl font-black text-white tracking-tight truncate">{item.title}</span>
+                                                                {item.department && (
+                                                                    <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-black uppercase tracking-widest border border-amber-500/20 shrink-0">
+                                                                        {item.department.name}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            {item.description && (
+                                                                <p className="text-white/40 text-sm font-medium mb-3 leading-relaxed">
+                                                                    {item.description}
+                                                                </p>
+                                                            )}
+                                                            <div className="flex items-center gap-2 text-white/20 text-xs font-black uppercase tracking-widest">
+                                                                <Clock className="h-3.5 w-3.5 mr-1" />
+                                                                {formatDuration(item.duration)}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Actions */}
+                                                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button
+                                                                onClick={() => openEditDialog(item)}
+                                                                className="h-10 w-10 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-center text-white/20 hover:text-amber-500 hover:border-amber-500/30 transition-all"
+                                                            >
+                                                                <Pencil className="h-4 w-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteItem(item.id)}
+                                                                className="h-10 w-10 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-center text-white/20 hover:text-red-500 hover:border-red-500/30 transition-all"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </Draggable>
+                                        ))}
+                                        {provided.placeholder}
                                     </div>
-                                </div>
-                            ))}
-                        </div>
+                                )}
+                            </Droppable>
+                        </DragDropContext>
                     )}
                 </CardContent>
             </Card>

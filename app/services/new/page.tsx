@@ -20,6 +20,19 @@ import { toast } from "sonner";
 export default function NewServicePage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
+    const [templates, setTemplates] = useState<any[]>([]);
+    const [selectedTemplate, setSelectedTemplate] = useState<string>("none");
+
+    const fetchTemplates = async () => {
+        try {
+            const res = await fetch("/api/services?template=true");
+            if (res.ok) setTemplates(await res.json());
+        } catch { /* ignore */ }
+    };
+
+    useState(() => {
+        fetchTemplates();
+    });
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -31,6 +44,7 @@ export default function NewServicePage() {
             description: formData.get("description"),
             date: formData.get("date"),
             recurrence: formData.get("recurrence"),
+            template_id: selectedTemplate === "none" ? null : selectedTemplate,
         };
 
         try {
@@ -44,7 +58,7 @@ export default function NewServicePage() {
             const service = await res.json();
 
             toast.success("Service created", {
-                description: "Now add items to your run sheet.",
+                description: selectedTemplate !== "none" ? "Templates items cloned successfully." : "Now add items to your run sheet.",
             });
             router.push(`/services/${service.id}`);
         } catch {
@@ -127,7 +141,27 @@ export default function NewServicePage() {
                         </div>
 
                         <div className="space-y-4 group">
-                            <Label htmlFor="description" className="text-sm font-bold uppercase text-white/60 tracking-widest block group-focus-within:text-amber-500 transition-colors">Description (optional)</Label>
+                            <Label htmlFor="template" className="text-sm font-bold uppercase text-white/60 tracking-widest block group-focus-within:text-amber-500 transition-colors">Start with Template (optional)</Label>
+                            <div className="relative">
+                                <Sparkles className="absolute left-6 top-1/2 -translate-y-1/2 h-6 w-6 text-white/10 pointer-events-none z-10 group-focus-within:text-amber-500/40 transition-colors" />
+                                <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+                                    <SelectTrigger className="h-16 pl-16 rounded-2xl border-white/[0.05] bg-white/[0.02] text-white/70 font-bold text-sm">
+                                        <SelectValue placeholder="Select a template" />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-[2.5rem] border-white/10 bg-black/80 backdrop-blur-3xl p-4 shadow-2xl">
+                                        <SelectItem value="none" className="font-bold py-4 px-6 text-white/70 focus:bg-white/5 focus:text-white">Blank (Manual Build)</SelectItem>
+                                        {templates.map((t) => (
+                                            <SelectItem key={t.id} value={t.id} className="font-bold py-4 px-6 text-amber-500/80 focus:bg-amber-500/10 focus:text-amber-500">
+                                                {t.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 group">
+                            <Label htmlFor="description" className="text-sm font-bold uppercase text-white/60 tracking-widest block group-focus-within:text-amber-500 transition-colors">Description / Goal (optional)</Label>
                             <div className="relative">
                                 <FileText className="absolute left-6 top-6 h-6 w-6 text-white/30 group-focus-within:text-amber-500/60 transition-colors" />
                                 <Textarea
