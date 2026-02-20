@@ -30,17 +30,19 @@ export default function ForgotPasswordPage() {
 
             if (response.ok) {
                 setIsSubmitted(true);
-                toast.success("Protocol Initiated", {
-                    description: "Recovery instructions dispatched to your coordinate."
+                toast.success("Check your email", {
+                    description: "We've sent you instructions to reset your password."
                 });
             } else {
                 const data = await response.json();
-                toast.error("Transmission Error", {
-                    description: data.message || "Failed to initiate recovery."
+                toast.error("Something went wrong", {
+                    description: data.message || "We couldn't process your request right now."
                 });
             }
         } catch (error) {
-            toast.error("Auth Core Critical Error");
+            toast.error("System Error", {
+                description: "Please try again later."
+            });
         } finally {
             setIsLoading(false);
         }
@@ -62,10 +64,10 @@ export default function ForgotPasswordPage() {
 
                     <div className="space-y-4">
                         <CardTitle className="text-5xl font-black tracking-tighter leading-none serveflow-title">
-                            Recovery<span className="serveflow-gold">Flow</span>
+                            Reset <span className="serveflow-gold">Password</span>
                         </CardTitle>
                         <p className="text-white/30 font-black uppercase text-[10px] tracking-[0.4em]">
-                            Identity Restoration // Secure Layer
+                            Enter your email to get started
                         </p>
                     </div>
                 </CardHeader>
@@ -74,14 +76,14 @@ export default function ForgotPasswordPage() {
                     <form onSubmit={handleSubmit} className="relative z-10">
                         <CardContent className="space-y-10 px-12">
                             <div className="space-y-4 group">
-                                <Label htmlFor="email" className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em] group-focus-within:text-amber-500 transition-colors">Identity Primary (Email)</Label>
+                                <Label htmlFor="email" className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em] group-focus-within:text-amber-500 transition-colors">Email Address</Label>
                                 <div className="relative">
                                     <Mail className="absolute left-6 top-1/2 -translate-y-1/2 h-5 w-5 text-white/10 group-focus-within:text-amber-500/40 transition-colors" />
                                     <Input
                                         id="email"
                                         name="email"
                                         type="email"
-                                        placeholder="IDENTITY@COORDINATE.COM"
+                                        placeholder="you@email.com"
                                         required
                                         className="h-16 pl-16 rounded-2xl border-white/[0.05] bg-white/[0.02] focus:bg-white/[0.05] focus-visible:ring-amber-500 transition-all font-black uppercase tracking-widest text-xs"
                                     />
@@ -96,15 +98,15 @@ export default function ForgotPasswordPage() {
                                 disabled={isLoading}
                             >
                                 <span className="flex items-center justify-center gap-3">
-                                    {isLoading ? "Transmitting..." : (
+                                    {isLoading ? "Sending..." : (
                                         <>
-                                            Request Reset Token <KeyRound className="h-6 w-6" />
+                                            Send Reset Link <KeyRound className="h-6 w-6" />
                                         </>
                                     )}
                                 </span>
                             </button>
                             <Link href="/login" className="flex items-center gap-2 text-sm font-bold text-white/20 hover:text-amber-500 transition-colors">
-                                <ArrowLeft className="h-4 w-4" /> Return to Login
+                                <ArrowLeft className="h-4 w-4" /> Back to Login
                             </Link>
                         </CardFooter>
                     </form>
@@ -116,13 +118,13 @@ export default function ForgotPasswordPage() {
                             </div>
                         </div>
                         <div className="space-y-4">
-                            <h3 className="text-2xl font-black tracking-tight text-white">Transmission Successful</h3>
+                            <h3 className="text-2xl font-black tracking-tight text-white">Check your Email</h3>
                             <p className="text-white/40 text-sm leading-relaxed">
-                                If an account exists with this email, a reset link has been dispatched to your coordinate. Please check your inbox and follow the instructions to restore identity access.
+                                If an account exists with this email, we&apos;ve sent you a link to reset your password. Please check your inbox and follow the steps in the email.
                             </p>
                         </div>
                         <Button asChild variant="ghost" className="text-amber-500 hover:text-white hover:bg-white/5 font-black uppercase tracking-widest text-xs h-14 px-8 rounded-xl border border-white/5 hover:border-amber-500/20">
-                            <Link href="/login">Return to Login</Link>
+                            <Link href="/login">Back to Login</Link>
                         </Button>
                     </CardContent>
                 )}

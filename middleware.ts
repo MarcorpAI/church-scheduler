@@ -11,8 +11,8 @@ export default auth((req) => {
     const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth");
     const isLiveDisplayRoute = nextUrl.pathname.startsWith("/live/");
     const isLiveStateApi = nextUrl.pathname.match(/^\/api\/services\/[^/]+\/live\/state$/);
-    const isPublicRoute = ["/", "/login", "/signup"].includes(nextUrl.pathname) || isLiveDisplayRoute || isLiveStateApi;
-    const isAuthRoute = ["/login", "/signup"].includes(nextUrl.pathname);
+    const isPublicRoute = ["/", "/login", "/signup", "/forgot-password", "/reset-password"].includes(nextUrl.pathname) || isLiveDisplayRoute || isLiveStateApi;
+    const isAuthRoute = ["/login", "/signup", "/forgot-password", "/reset-password"].includes(nextUrl.pathname);
 
     if (isApiAuthRoute) {
         return null;
