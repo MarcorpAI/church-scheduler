@@ -659,6 +659,81 @@ export default function ServiceBuilderPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Review Dialog */}
+            <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+                <DialogContent className="max-w-2xl bg-black/80 backdrop-blur-3xl border-white/[0.05] rounded-[2.5rem] p-10 shadow-2xl">
+                    <DialogHeader className="space-y-6">
+                        <div className="h-14 w-14 rounded-2xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 shadow-inner">
+                            <Radio className="h-7 w-7 text-amber-500" />
+                        </div>
+                        <div className="space-y-2">
+                            <DialogTitle className="text-4xl font-black text-white tracking-tighter">
+                                Review Run Sheet
+                            </DialogTitle>
+                            <DialogDescription className="font-medium text-white/30 text-lg leading-relaxed">
+                                Configure your live settings before broadcasting.
+                            </DialogDescription>
+                        </div>
+                    </DialogHeader>
+
+                    <div className="space-y-10 py-8">
+                        <div className="grid grid-cols-2 gap-8">
+                            <div className="space-y-4">
+                                <Label className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em]">Advance Mode</Label>
+                                <Select value={advanceMode} onValueChange={(v: any) => setAdvanceMode(v)}>
+                                    <SelectTrigger className="h-16 rounded-2xl border-white/[0.05] bg-white/[0.02] text-white/80 font-black uppercase text-xs tracking-widest">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-[2rem] border-white/10 bg-black/80 backdrop-blur-3xl p-2 shadow-2xl">
+                                        <SelectItem value="AUTO" className="font-black py-4 px-6 text-xs uppercase tracking-widest focus:bg-amber-500/10 focus:text-amber-500">Auto-Advance</SelectItem>
+                                        <SelectItem value="MANUAL" className="font-black py-4 px-6 text-xs uppercase tracking-widest focus:bg-amber-500/10 focus:text-amber-500">Manual</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-4">
+                                <Label className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em]">Buffer (Seconds)</Label>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    max="60"
+                                    value={bufferTime}
+                                    onChange={(e) => setBufferTime(e.target.value)}
+                                    className="h-16 rounded-2xl border-white/[0.05] bg-white/[0.02] focus:bg-white/[0.05] focus-visible:ring-amber-500 font-black text-lg"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <Label className="text-[10px] font-black uppercase text-white/20 tracking-[0.3em]">Service Overview</Label>
+                            <div className="max-h-[200px] overflow-y-auto rounded-3xl border border-white/5 bg-white/[0.01] divide-y divide-white/[0.03]">
+                                {service.items.map((item, i) => (
+                                    <div key={item.id} className="p-4 flex justify-between items-center">
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-[10px] font-black text-white/10 w-4">{i + 1}</span>
+                                            <span className="text-sm font-bold text-white/60">{item.title}</span>
+                                        </div>
+                                        <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">{formatDuration(item.duration)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <button
+                            onClick={handleGoLive}
+                            className="liquid-glass-button w-full h-20 text-xl tracking-tighter shadow-2xl border-amber-500/20"
+                        >
+                            <span className="relative z-10 flex items-center justify-center gap-3 text-amber-500">
+                                Start Live Service
+                                <Radio className="h-6 w-6 animate-pulse" />
+                            </span>
+                        </button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
